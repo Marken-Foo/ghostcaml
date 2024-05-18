@@ -16,6 +16,17 @@ module WordTree = struct
     CharMap.to_list node.valid_moves
     |> List.map snd
     |> List.fold_left recurse new_acc
+
+  let next_node c node = CharMap.find_opt c node.valid_moves
+
+  let rec _find_node (word : char list) node =
+    match word with
+    | [] -> Some node
+    | c :: cs -> (
+        match next_node c node with None -> None | Some n -> _find_node cs n)
+
+  let find_node (word : string) node =
+    _find_node (word |> String.to_seq |> List.of_seq) node
 end
 
 type player = Player1 | Player2
