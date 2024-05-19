@@ -12,6 +12,9 @@ module WordTree : sig
 end
 
 type player = Player1 | Player2
+
+val other_player : player -> player
+
 type game_string = Word of string | NotWord of string
 
 type game_value =
