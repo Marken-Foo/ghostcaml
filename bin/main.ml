@@ -1,6 +1,5 @@
 open Ghost
 open Ghost.Solution_tree
-open Ghost.Word_tree
 
 type move_outcome = Legal | Illegal | SpellsWord
 

@@ -5,6 +5,8 @@ type player = Player1 | Player2
 let other_player player =
   match player with Player1 -> Player2 | Player2 -> Player1
 
+module CharMap = Word_tree.CharMap
+
 type game_string = Word of string | NotWord of string
 
 type game_value =
@@ -45,13 +47,12 @@ let rec insert_word (word : char list) (node : game_string t) =
         valid_moves = CharMap.add c (insert_word cs next_node) node.valid_moves;
       }
 
-(* To be used with the tree catamorphism *)
-
 (** Given the evaluated children of the current simple node,
     evaluate who wins from the current node (assuming best play),
     and which moves are winning. *)
 let _evaluate (node : game_string t) (new_children : game_value t CharMap.t) :
     game_value t =
+  (* To be used with the tree catamorphism *)
   let old_value = node.value in
   let depth = match old_value with Word w | NotWord w -> String.length w in
   let player_to_move = if depth mod 2 = 0 then Player1 else Player2 in
@@ -75,47 +76,6 @@ let _evaluate (node : game_string t) (new_children : game_value t CharMap.t) :
     returning a [game_value] tree. *)
 let evaluate (tree : game_string t) = cata _evaluate tree
 
-let print_plain_node (node : game_string t) =
-  let game_string = node.value in
-  let is_word, w =
-    match game_string with Word w -> (true, w) | NotWord w -> (false, w)
-  in
-  Format.printf "(word: %s, depth: %i, children: %s, is word: %b)\n" w
-    (String.length w)
-    (node.valid_moves |> CharMap.to_seq |> Seq.map fst |> String.of_seq)
-    is_word
-
-let print_evaluated_node (node : game_value t) =
-  let game_string = get_string node.value in
-  let is_word =
-    match node.value with Won _ -> true | Winning _ | Losing _ -> false
-  in
-  let depth = String.length game_string in
-  let children =
-    node.valid_moves |> CharMap.to_seq |> Seq.map fst |> String.of_seq
-  in
-  let winner =
-    match get_winner node.value with Player1 -> "Sente" | Player2 -> "Gote"
-  in
-  let winning_moves =
-    match node.value with
-    | Won _ -> "ALREADY WON"
-    | Winning v -> v.winning_moves |> List.to_seq |> String.of_seq
-    | Losing _ -> ""
-  in
-  Format.printf
-    "(word: %s, depth: %i, children: %s, is word: %b, winner: %s)\n\
-    \  winning moves: [%s]\n"
-    game_string depth children is_word winner winning_moves
-
-let print_tree (node : game_string t) =
-  let print_node _ n = print_plain_node n in
-  foldl print_node () node
-
-let print_evaluated (node : game_value t) =
-  let print_node _ n = print_evaluated_node n in
-  foldl print_node () node
-
 (** Constructs a [game_string] tree from a list of strings. *)
 let tree_from_words words =
   let chars_of_words =
@@ -124,7 +84,46 @@ let tree_from_words words =
   let root = { valid_moves = CharMap.empty; value = NotWord "" } in
   List.fold_right insert_word chars_of_words root
 
-(* Read wordlist file and build evaluated tree. *)
-let read_lines file = In_channel.with_open_bin file In_channel.input_lines
-let words = read_lines "ghost_words.txt"
-let evaluated_tree = tree_from_words words |> evaluate
+(** Temp module for printing trees to test *)
+module TreePrinting = struct
+  let print_plain_node (node : game_string t) =
+    let game_string = node.value in
+    let is_word, w =
+      match game_string with Word w -> (true, w) | NotWord w -> (false, w)
+    in
+    Format.printf "(word: %s, depth: %i, children: %s, is word: %b)\n" w
+      (String.length w)
+      (node.valid_moves |> CharMap.to_seq |> Seq.map fst |> String.of_seq)
+      is_word
+
+  let print_evaluated_node (node : game_value t) =
+    let game_string = get_string node.value in
+    let is_word =
+      match node.value with Won _ -> true | Winning _ | Losing _ -> false
+    in
+    let depth = String.length game_string in
+    let children =
+      node.valid_moves |> CharMap.to_seq |> Seq.map fst |> String.of_seq
+    in
+    let winner =
+      match get_winner node.value with Player1 -> "Sente" | Player2 -> "Gote"
+    in
+    let winning_moves =
+      match node.value with
+      | Won _ -> "ALREADY WON"
+      | Winning v -> v.winning_moves |> List.to_seq |> String.of_seq
+      | Losing _ -> ""
+    in
+    Format.printf
+      "(word: %s, depth: %i, children: %s, is word: %b, winner: %s)\n\
+      \  winning moves: [%s]\n"
+      game_string depth children is_word winner winning_moves
+
+  let print_tree (node : game_string t) =
+    let print_node _ n = print_plain_node n in
+    foldl print_node () node
+
+  let print_evaluated (node : game_value t) =
+    let print_node _ n = print_evaluated_node n in
+    foldl print_node () node
+end
