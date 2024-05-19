@@ -1,15 +1,17 @@
+open Ghost
 open Ghost.Build_tree
+open Ghost.Word_tree
 
 type move_outcome = Legal | Illegal | SpellsWord
 
-let move_outcome (c : char) (curr_node : game_value WordTree.t) =
-  match WordTree.next_node c curr_node with
+let move_outcome (c : char) (curr_node : game_value Word_tree.t) =
+  match Word_tree.next_node c curr_node with
   | None -> Illegal
   | Some { value = Won _; _ } -> SpellsWord
   | Some { value = Winning _ | Losing _; _ } -> Legal
 
 type game_state = {
-  solution : game_value WordTree.t;
+  solution : game_value Word_tree.t;
   curr_string : string;
   side_to_move : player;
   human_player : player;
@@ -27,7 +29,7 @@ let next_game_state (state : game_state) (c : char) =
 let random_from_list list = List.nth list (Random.int (List.length list))
 
 (** Given the current node, decide the computer's next move. *)
-let decide_computer_next_move (curr_node : game_value WordTree.t) =
+let decide_computer_next_move (curr_node : game_value Word_tree.t) =
   match curr_node.value with
   | Won _ -> assert false
   | Winning { winning_moves; _ } -> random_from_list winning_moves
@@ -35,7 +37,7 @@ let decide_computer_next_move (curr_node : game_value WordTree.t) =
       let valid_moves = curr_node.valid_moves |> CharMap.to_list in
       let not_immediately_losing =
         CharMap.filter
-          (fun _ (n : game_value WordTree.t) ->
+          (fun _ (n : game_value Word_tree.t) ->
             match n.value with Won _ -> false | Winning _ | Losing _ -> true)
           curr_node.valid_moves
       in
@@ -89,7 +91,7 @@ and player_turn game_state =
 
 and computer_turn game_state =
   let { solution; curr_string; _ } = game_state in
-  let curr_node = WordTree.find_node curr_string solution in
+  let curr_node = Word_tree.find_node curr_string solution in
   let c =
     Option.fold ~none:(char_of_int 0) ~some:decide_computer_next_move curr_node
   in
@@ -101,7 +103,7 @@ and evaluate_move game_state c =
   let next_string = curr_string ^ String.make 1 c in
   let new_state = next_game_state game_state c in
   let outcome =
-    WordTree.find_node game_state.curr_string solution
+    Word_tree.find_node game_state.curr_string solution
     |> Option.fold ~none:Illegal ~some:(move_outcome c)
   in
   match outcome with

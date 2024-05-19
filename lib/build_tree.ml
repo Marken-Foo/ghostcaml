@@ -1,33 +1,4 @@
-module CharMap = Map.Make (Char)
-
-(** A tree where each child node is indexed by a letter.
-   A word (or prefix) can be represented by a path from the root. *)
-module WordTree = struct
-  type 'a t = { valid_moves : 'a t CharMap.t; value : 'a }
-
-  (** Tree catamorphism *)
-  let rec cata f_node (node : 'a t) : 'r =
-    let recurse = cata f_node in
-    f_node node (node.valid_moves |> CharMap.map recurse)
-
-  let rec foldl f_node acc (node : 'a t) : 'r =
-    let recurse = foldl f_node in
-    let new_acc = f_node acc node in
-    CharMap.to_list node.valid_moves
-    |> List.map snd
-    |> List.fold_left recurse new_acc
-
-  let next_node c node = CharMap.find_opt c node.valid_moves
-
-  let rec _find_node (word : char list) node =
-    match word with
-    | [] -> Some node
-    | c :: cs -> (
-        match next_node c node with None -> None | Some n -> _find_node cs n)
-
-  let find_node (word : string) node =
-    _find_node (word |> String.to_seq |> List.of_seq) node
-end
+open Word_tree
 
 type player = Player1 | Player2
 
@@ -53,7 +24,7 @@ let get_string game_value =
   | Losing v -> v.string
   | Won v -> v.string
 
-let rec insert_word (word : char list) (node : game_string WordTree.t) =
+let rec insert_word (word : char list) (node : game_string t) =
   let w = match node.value with Word w | NotWord w -> w in
   match word with
   | [] -> { node with value = Word w }
@@ -79,8 +50,8 @@ let rec insert_word (word : char list) (node : game_string WordTree.t) =
 (** Given the evaluated children of the current simple node,
     evaluate who wins from the current node (assuming best play),
     and which moves are winning. *)
-let _evaluate (node : game_string WordTree.t)
-    (new_children : game_value WordTree.t CharMap.t) : game_value WordTree.t =
+let _evaluate (node : game_string t) (new_children : game_value t CharMap.t) :
+    game_value t =
   let old_value = node.value in
   let depth = match old_value with Word w | NotWord w -> String.length w in
   let player_to_move = if depth mod 2 = 0 then Player1 else Player2 in
@@ -90,7 +61,7 @@ let _evaluate (node : game_string WordTree.t)
     | NotWord w -> (
         let winning_moves =
           new_children |> CharMap.to_list
-          |> List.filter (fun (_, (n : game_value WordTree.t)) ->
+          |> List.filter (fun (_, (n : game_value t)) ->
                  player_to_move = get_winner n.value)
           |> List.map fst
         in
@@ -102,9 +73,9 @@ let _evaluate (node : game_string WordTree.t)
 
 (** Evaluates the winner and winning moves of every node of a [game_string] tree,
     returning a [game_value] tree. *)
-let evaluate (tree : game_string WordTree.t) = WordTree.cata _evaluate tree
+let evaluate (tree : game_string t) = cata _evaluate tree
 
-let print_plain_node (node : game_string WordTree.t) =
+let print_plain_node (node : game_string t) =
   let game_string = node.value in
   let is_word, w =
     match game_string with Word w -> (true, w) | NotWord w -> (false, w)
@@ -114,7 +85,7 @@ let print_plain_node (node : game_string WordTree.t) =
     (node.valid_moves |> CharMap.to_seq |> Seq.map fst |> String.of_seq)
     is_word
 
-let print_evaluated_node (node : game_value WordTree.t) =
+let print_evaluated_node (node : game_value t) =
   let game_string = get_string node.value in
   let is_word =
     match node.value with Won _ -> true | Winning _ | Losing _ -> false
@@ -137,20 +108,20 @@ let print_evaluated_node (node : game_value WordTree.t) =
     \  winning moves: [%s]\n"
     game_string depth children is_word winner winning_moves
 
-let print_tree (node : game_string WordTree.t) =
+let print_tree (node : game_string t) =
   let print_node _ n = print_plain_node n in
-  WordTree.foldl print_node () node
+  foldl print_node () node
 
-let print_evaluated (node : game_value WordTree.t) =
+let print_evaluated (node : game_value t) =
   let print_node _ n = print_evaluated_node n in
-  WordTree.foldl print_node () node
+  foldl print_node () node
 
 (** Constructs a [game_string] tree from a list of strings. *)
 let tree_from_words words =
   let chars_of_words =
     words |> List.map String.to_seq |> List.map List.of_seq
   in
-  let root = WordTree.{ valid_moves = CharMap.empty; value = NotWord "" } in
+  let root = { valid_moves = CharMap.empty; value = NotWord "" } in
   List.fold_right insert_word chars_of_words root
 
 (* Read wordlist file and build evaluated tree. *)

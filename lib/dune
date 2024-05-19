@@ -1,2 +1,4 @@
 (library
- (name ghost))
+ (name ghost)
+ (flags
+  (:standard -warn-error -32)))
