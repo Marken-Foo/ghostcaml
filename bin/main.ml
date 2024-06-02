@@ -1,13 +1,7 @@
 open Ghost
 open Ghost.Solution_tree
 
-type move_outcome = Legal | Illegal | SpellsWord
-
-let move_outcome (c : char) (curr_node : game_value Word_tree.t) =
-  match Word_tree.next_node c curr_node with
-  | None -> Illegal
-  | Some { value = Won _; _ } -> SpellsWord
-  | Some { value = Winning _ | Losing _; _ } -> Legal
+type word_status = Word | ValidPrefix | InvalidPrefix
 
 module type GameState = sig
   type t
@@ -15,6 +9,7 @@ module type GameState = sig
   val initial : solution:game_value Word_tree.t -> human_player:player -> t
   val advance : t -> char -> t
   val is_players_turn : t -> bool
+  val status : t -> word_status
   val current_string : t -> string
   val current_node : t -> game_value Word_tree.t option
 end
@@ -47,6 +42,13 @@ module GameState : GameState = struct
     }
 
   let is_players_turn state = state.side_to_move = state.human_player
+
+  let status state =
+    match state.curr_node with
+    | None -> InvalidPrefix
+    | Some { value = Won _; _ } -> Word
+    | Some { value = Winning _ | Losing _; _ } -> ValidPrefix
+
   let current_string state = state.curr_string
   let current_node state = state.curr_node
 end
@@ -111,8 +113,7 @@ and player_turn game_state =
 
 and computer_turn game_state =
   let curr_string = GameState.current_string game_state in
-  let curr_node = GameState.current_node game_state in
-  match curr_node with
+  match GameState.current_node game_state with
   | None ->
       Printf.printf "Illegal move! No word begins with '%s'!\n" curr_string;
       end_game game_state
@@ -122,20 +123,16 @@ and computer_turn game_state =
       evaluate_move game_state c
 
 and evaluate_move game_state c =
-  let curr_node = GameState.current_node game_state in
   let new_state = GameState.advance game_state c in
   let next_string = GameState.current_string new_state in
-  let outcome =
-    match curr_node with None -> Illegal | Some n -> move_outcome c n
-  in
-  match outcome with
-  | Illegal ->
+  match GameState.status new_state with
+  | InvalidPrefix ->
       Printf.printf "Illegal move! No word begins with '%s'!\n" next_string;
       end_game new_state
-  | SpellsWord ->
+  | Word ->
       Printf.printf "Spelled a word! '%s' is a word!\n" next_string;
       end_game new_state
-  | Legal -> turn new_state
+  | ValidPrefix -> turn new_state
 
 and end_game game_state =
   let () =
