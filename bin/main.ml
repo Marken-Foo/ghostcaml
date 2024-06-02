@@ -16,6 +16,8 @@ type game_state = {
   human_player : player;
 }
 
+type should_play = Play | Quit
+
 (** Return the game state that would arise after playing the given character. *)
 let next_game_state (state : game_state) (c : char) =
   {
@@ -115,30 +117,34 @@ and evaluate_move game_state c =
   | Legal -> turn new_state
 
 and end_game game_state =
-  let { side_to_move; human_player; solution; _ } = game_state in
+  let { side_to_move; human_player; _ } = game_state in
   let () =
     match side_to_move = human_player with
     | true -> Printf.printf "You win!\n"
     | false -> Printf.printf "Computer wins!\n"
   in
-  play_again solution
+  ()
 
-and play_again solution =
+let ask_play_again () =
   Printf.printf "Play again? (Y for yes / any other input to quit)\n";
   let input = read_line () in
-  match input with
-  | "y" | "Y" -> ask_for_side solution
-  | _ ->
-      Printf.printf "Goodbye!\n";
-      exit 0
+  match input with "y" | "Y" -> Play | _ -> Quit
 
 (* Read wordlist file and build evaluated tree. *)
 let read_lines file = In_channel.with_open_bin file In_channel.input_lines
 let solution () = tree_from_words (read_lines "ghost_words.txt") |> evaluate
 
-let start_game _ =
+let rec loop_game solution action =
+  match action with
+  | Play ->
+      ask_for_side solution;
+      loop_game solution (ask_play_again ())
+  | Quit -> ()
+
+let main _ =
   Printf.printf "Welcome to GHOST.\n";
   let solution = solution () in
-  ask_for_side solution
+  loop_game solution Play;
+  Printf.printf "Goodbye!\n"
 
-let _ = start_game ()
+let _ = main ()
