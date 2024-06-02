@@ -17,3 +17,6 @@ val evaluate : game_string Word_tree.t -> game_value Word_tree.t
 
 val tree_from_words : string list -> game_string Word_tree.t
 (** Constructs a [game_string] tree from a list of strings. *)
+
+val get_word : game_value Word_tree.t -> string
+(** Given a node, returns some word represented by one of its descendants. *)

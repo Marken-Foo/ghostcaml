@@ -2,6 +2,7 @@ open Ghost
 open Ghost.Solution_tree
 
 type word_status = Word | ValidPrefix | InvalidPrefix
+type move = Letter of char | Challenge
 type player = Human | Computer
 
 let other_player player =
@@ -16,6 +17,7 @@ module type GameState = sig
   val current_turn : t -> player
   val current_string : t -> string
   val current_node : t -> game_value Word_tree.t option
+  val valid_word : t -> string option
 end
 
 module GameState : GameState = struct
@@ -47,6 +49,7 @@ module GameState : GameState = struct
   let current_turn state = state.side_to_move
   let current_string state = state.curr_string
   let current_node state = state.curr_node
+  let valid_word state = state.curr_node |> Option.map Solution_tree.get_word
 end
 
 type should_play = Play | Quit
@@ -57,7 +60,7 @@ let random_from_list list = List.nth list (Random.int (List.length list))
 (** Given the current node, decide the computer's next move. *)
 let decide_computer_next_move (curr_node : game_value Word_tree.t) =
   match curr_node.value with
-  | Won _ -> assert false
+  | Won _ -> assert false (* caught by game loop, not computer move *)
   | Winning { winning_moves; _ } -> random_from_list winning_moves
   | Losing _ -> (
       let valid_moves = curr_node.valid_moves |> CharMap.to_list in
@@ -97,16 +100,26 @@ and turn game_state =
 
 and player_turn game_state =
   let curr_string = GameState.current_string game_state in
-  let _ = Printf.printf "Current string: %s\nEnter a letter:\n" curr_string in
-  let input = read_line () |> String.to_seq |> List.of_seq in
-  let input_char =
-    match input with c :: [] when is_alpha c -> Some c | _ -> None
+  let _ =
+    Printf.printf "Current string: %s\nEnter a letter or 'challenge':\n"
+      curr_string
   in
-  match input_char with
+  let input = read_line () in
+  let move =
+    match input with
+    | s when s |> String.lowercase_ascii = "challenge" -> Some Challenge
+    | s when String.length s = 1 ->
+        let c = String.get s 0 in
+        if is_alpha c then Some (Letter c) else None
+    | _ -> None
+  in
+  match move with
   | None ->
-      Printf.printf "Please enter a single letter.\n";
+      Printf.printf
+        "Please enter a single letter, or 'challenge' to challenge the word.\n";
       player_turn game_state
-  | Some c -> evaluate_move game_state c
+  | Some Challenge -> challenge game_state
+  | Some (Letter c) -> make_move game_state c
 
 and computer_turn game_state =
   match GameState.current_node game_state with
@@ -116,7 +129,7 @@ and computer_turn game_state =
   | Some n ->
       let c = decide_computer_next_move n in
       Printf.printf "Computer plays a letter: %c\n" c;
-      evaluate_move game_state c
+      make_move game_state c
 
 (** Challenges that there is no word beginning with the current game string.
     The player to move is the challenger. *)
@@ -127,22 +140,23 @@ and challenge game_state =
       Printf.printf "Illegal move! No word begins with '%s'!\n" curr_string;
       declare_win game_state
   | Word | ValidPrefix ->
+      let curr_string = GameState.current_string game_state in
+      let valid_word =
+        GameState.valid_word game_state |> Option.fold ~none:"" ~some:Fun.id
+      in
       Printf.printf
         "Invalid challenge! An example word beginning with '%s' is '%s'.\n"
-        curr_string "EXAMPLE WORD";
+        curr_string valid_word;
       declare_loss game_state
 
-and evaluate_move game_state c =
+and make_move game_state c =
   let new_state = GameState.advance game_state c in
   let next_string = GameState.current_string new_state in
   match GameState.status new_state with
-  | InvalidPrefix ->
-      Printf.printf "Illegal move! No word begins with '%s'!\n" next_string;
-      declare_win new_state
   | Word ->
       Printf.printf "Spelled a word! '%s' is a word!\n" next_string;
       declare_win new_state
-  | ValidPrefix -> turn new_state
+  | ValidPrefix | InvalidPrefix -> turn new_state
 
 (** Declare the player to move as the winner. *)
 and declare_win game_state =
@@ -166,8 +180,7 @@ let ask_play_again () =
 let read_lines file = In_channel.with_open_bin file In_channel.input_lines
 let solution () = tree_from_words (read_lines "ghost_words.txt") |> evaluate
 
-let rec loop_game solution action =
-  match action with
+let rec loop_game solution = function
   | Play ->
       ask_for_side solution;
       loop_game solution (ask_play_again ())

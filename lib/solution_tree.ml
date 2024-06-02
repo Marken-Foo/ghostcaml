@@ -84,6 +84,14 @@ let tree_from_words words =
   let root = { valid_moves = CharMap.empty; value = NotWord "" } in
   List.fold_right insert_word chars_of_words root
 
+let rec get_word (node : game_value t) =
+  match node.value with
+  | Won { string; _ } -> string
+  | Winning _ | Losing _ -> (
+      match node.valid_moves |> CharMap.choose_opt with
+      | None -> assert false
+      | Some (_, next_node) -> get_word next_node)
+
 (** Temp module for printing trees to test *)
 module TreePrinting = struct
   let print_plain_node (node : game_string t) =
