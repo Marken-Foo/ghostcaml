@@ -9,13 +9,6 @@ let move_outcome (c : char) (curr_node : game_value Word_tree.t) =
   | Some { value = Won _; _ } -> SpellsWord
   | Some { value = Winning _ | Losing _; _ } -> Legal
 
-type game_state = {
-  curr_node : game_value Word_tree.t option;
-  curr_string : string;
-  side_to_move : player;
-  human_player : player;
-}
-
 module type GameState = sig
   type t
 
@@ -27,7 +20,12 @@ module type GameState = sig
 end
 
 module GameState : GameState = struct
-  type t = game_state
+  type t = {
+    curr_node : game_value Word_tree.t option;
+    curr_string : string;
+    side_to_move : player;
+    human_player : player;
+  }
 
   let initial ~solution ~human_player =
     {
@@ -54,18 +52,6 @@ module GameState : GameState = struct
 end
 
 type should_play = Play | Quit
-
-(** Return the game state that would arise after playing the given character. *)
-let next_game_state (state : game_state) (c : char) =
-  {
-    state with
-    curr_node =
-      (match state.curr_node with
-      | None -> None
-      | Some n -> Word_tree.next_node c n);
-    curr_string = state.curr_string ^ String.make 1 c;
-    side_to_move = other_player state.side_to_move;
-  }
 
 (** Returns a random element of a list. *)
 let random_from_list list = List.nth list (Random.int (List.length list))
@@ -94,32 +80,24 @@ let is_alpha ch =
 
 let rec ask_for_side solution =
   Printf.printf "Do you want to go first or second? (enter 1 or 2)\n";
-  let player_side =
+  let side_choice =
     match read_line () with
     | "1" -> Some Player1
     | "2" -> Some Player2
     | _ -> None
   in
-  match player_side with
+  match side_choice with
   | None ->
       Printf.printf "Invalid input. Please enter '1' or '2'.\n";
       ask_for_side solution
-  | Some player ->
-      turn
-        {
-          curr_node = Some solution;
-          side_to_move = Player1;
-          curr_string = "";
-          human_player = player;
-        }
+  | Some human_player -> turn (GameState.initial ~solution ~human_player)
 
 and turn game_state =
-  let { side_to_move; human_player; _ } = game_state in
-  if side_to_move = human_player then player_turn game_state
+  if GameState.is_players_turn game_state then player_turn game_state
   else computer_turn game_state
 
 and player_turn game_state =
-  let { curr_string; _ } = game_state in
+  let curr_string = GameState.current_string game_state in
   let _ = Printf.printf "Current string: %s\nEnter a letter:\n" curr_string in
   let input = read_line () |> String.to_seq |> List.of_seq in
   let input_char =
@@ -132,7 +110,8 @@ and player_turn game_state =
   | Some c -> evaluate_move game_state c
 
 and computer_turn game_state =
-  let { curr_node; curr_string; _ } = game_state in
+  let curr_string = GameState.current_string game_state in
+  let curr_node = GameState.current_node game_state in
   match curr_node with
   | None ->
       Printf.printf "Illegal move! No word begins with '%s'!\n" curr_string;
@@ -143,9 +122,9 @@ and computer_turn game_state =
       evaluate_move game_state c
 
 and evaluate_move game_state c =
-  let { curr_node; curr_string; _ } = game_state in
-  let next_string = curr_string ^ String.make 1 c in
-  let new_state = next_game_state game_state c in
+  let curr_node = GameState.current_node game_state in
+  let new_state = GameState.advance game_state c in
+  let next_string = GameState.current_string new_state in
   let outcome =
     match curr_node with None -> Illegal | Some n -> move_outcome c n
   in
@@ -159,9 +138,8 @@ and evaluate_move game_state c =
   | Legal -> turn new_state
 
 and end_game game_state =
-  let { side_to_move; human_player; _ } = game_state in
   let () =
-    match side_to_move = human_player with
+    match GameState.is_players_turn game_state with
     | true -> Printf.printf "You win!\n"
     | false -> Printf.printf "Computer wins!\n"
   in
