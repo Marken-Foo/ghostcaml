@@ -16,6 +16,43 @@ type game_state = {
   human_player : player;
 }
 
+module type GameState = sig
+  type t
+
+  val initial : solution:game_value Word_tree.t -> human_player:player -> t
+  val advance : t -> char -> t
+  val is_players_turn : t -> bool
+  val current_string : t -> string
+  val current_node : t -> game_value Word_tree.t option
+end
+
+module GameState : GameState = struct
+  type t = game_state
+
+  let initial ~solution ~human_player =
+    {
+      curr_node = Some solution;
+      side_to_move = Player1;
+      curr_string = "";
+      human_player;
+    }
+
+  let advance state c =
+    {
+      state with
+      curr_node =
+        (match state.curr_node with
+        | None -> None
+        | Some n -> Word_tree.next_node c n);
+      curr_string = state.curr_string ^ String.make 1 c;
+      side_to_move = other_player state.side_to_move;
+    }
+
+  let is_players_turn state = state.side_to_move = state.human_player
+  let current_string state = state.curr_string
+  let current_node state = state.curr_node
+end
+
 type should_play = Play | Quit
 
 (** Return the game state that would arise after playing the given character. *)
