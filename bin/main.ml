@@ -10,7 +10,7 @@ let move_outcome (c : char) (curr_node : game_value Word_tree.t) =
   | Some { value = Winning _ | Losing _; _ } -> Legal
 
 type game_state = {
-  solution : game_value Word_tree.t;
+  curr_node : game_value Word_tree.t option;
   curr_string : string;
   side_to_move : player;
   human_player : player;
@@ -22,6 +22,10 @@ type should_play = Play | Quit
 let next_game_state (state : game_state) (c : char) =
   {
     state with
+    curr_node =
+      (match state.curr_node with
+      | None -> None
+      | Some n -> Word_tree.next_node c n);
     curr_string = state.curr_string ^ String.make 1 c;
     side_to_move = other_player state.side_to_move;
   }
@@ -66,7 +70,7 @@ let rec ask_for_side solution =
   | Some player ->
       turn
         {
-          solution;
+          curr_node = Some solution;
           side_to_move = Player1;
           curr_string = "";
           human_player = player;
@@ -91,21 +95,22 @@ and player_turn game_state =
   | Some c -> evaluate_move game_state c
 
 and computer_turn game_state =
-  let { solution; curr_string; _ } = game_state in
-  let curr_node = Word_tree.find_node curr_string solution in
-  let c =
-    Option.fold ~none:(char_of_int 0) ~some:decide_computer_next_move curr_node
-  in
-  Printf.printf "Computer plays a letter: %c\n" c;
-  evaluate_move game_state c
+  let { curr_node; curr_string; _ } = game_state in
+  match curr_node with
+  | None ->
+      Printf.printf "Illegal move! No word begins with '%s'!\n" curr_string;
+      end_game game_state
+  | Some n ->
+      let c = decide_computer_next_move n in
+      Printf.printf "Computer plays a letter: %c\n" c;
+      evaluate_move game_state c
 
 and evaluate_move game_state c =
-  let { solution; curr_string; _ } = game_state in
+  let { curr_node; curr_string; _ } = game_state in
   let next_string = curr_string ^ String.make 1 c in
   let new_state = next_game_state game_state c in
   let outcome =
-    Word_tree.find_node game_state.curr_string solution
-    |> Option.fold ~none:Illegal ~some:(move_outcome c)
+    match curr_node with None -> Illegal | Some n -> move_outcome c n
   in
   match outcome with
   | Illegal ->
