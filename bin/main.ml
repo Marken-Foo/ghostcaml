@@ -2,14 +2,18 @@ open Ghost
 open Ghost.Solution_tree
 
 type word_status = Word | ValidPrefix | InvalidPrefix
+type player = Human | Computer
+
+let other_player player =
+  match player with Human -> Computer | Computer -> Human
 
 module type GameState = sig
   type t
 
-  val initial : solution:game_value Word_tree.t -> human_player:player -> t
+  val initial : solution:game_value Word_tree.t -> first_player:player -> t
   val advance : t -> char -> t
-  val is_players_turn : t -> bool
   val status : t -> word_status
+  val current_turn : t -> player
   val current_string : t -> string
   val current_node : t -> game_value Word_tree.t option
 end
@@ -19,20 +23,13 @@ module GameState : GameState = struct
     curr_node : game_value Word_tree.t option;
     curr_string : string;
     side_to_move : player;
-    human_player : player;
   }
 
-  let initial ~solution ~human_player =
-    {
-      curr_node = Some solution;
-      side_to_move = Player1;
-      curr_string = "";
-      human_player;
-    }
+  let initial ~solution ~first_player =
+    { curr_node = Some solution; side_to_move = first_player; curr_string = "" }
 
   let advance state c =
     {
-      state with
       curr_node =
         (match state.curr_node with
         | None -> None
@@ -41,14 +38,13 @@ module GameState : GameState = struct
       side_to_move = other_player state.side_to_move;
     }
 
-  let is_players_turn state = state.side_to_move = state.human_player
-
   let status state =
     match state.curr_node with
     | None -> InvalidPrefix
     | Some { value = Won _; _ } -> Word
     | Some { value = Winning _ | Losing _; _ } -> ValidPrefix
 
+  let current_turn state = state.side_to_move
   let current_string state = state.curr_string
   let current_node state = state.curr_node
 end
@@ -82,21 +78,22 @@ let is_alpha ch =
 
 let rec ask_for_side solution =
   Printf.printf "Do you want to go first or second? (enter 1 or 2)\n";
-  let side_choice =
+  let first_player =
     match read_line () with
-    | "1" -> Some Player1
-    | "2" -> Some Player2
+    | "1" -> Some Human
+    | "2" -> Some Computer
     | _ -> None
   in
-  match side_choice with
+  match first_player with
   | None ->
       Printf.printf "Invalid input. Please enter '1' or '2'.\n";
       ask_for_side solution
-  | Some human_player -> turn (GameState.initial ~solution ~human_player)
+  | Some first_player -> turn (GameState.initial ~solution ~first_player)
 
 and turn game_state =
-  if GameState.is_players_turn game_state then player_turn game_state
-  else computer_turn game_state
+  match GameState.current_turn game_state with
+  | Human -> player_turn game_state
+  | Computer -> computer_turn game_state
 
 and player_turn game_state =
   let curr_string = GameState.current_string game_state in
@@ -112,15 +109,28 @@ and player_turn game_state =
   | Some c -> evaluate_move game_state c
 
 and computer_turn game_state =
-  let curr_string = GameState.current_string game_state in
   match GameState.current_node game_state with
   | None ->
-      Printf.printf "Illegal move! No word begins with '%s'!\n" curr_string;
-      end_game game_state
+      Printf.printf "Computer challenges!\n";
+      challenge game_state
   | Some n ->
       let c = decide_computer_next_move n in
       Printf.printf "Computer plays a letter: %c\n" c;
       evaluate_move game_state c
+
+(** Challenges that there is no word beginning with the current game string.
+    The player to move is the challenger. *)
+and challenge game_state =
+  let curr_string = GameState.current_string game_state in
+  match GameState.status game_state with
+  | InvalidPrefix ->
+      Printf.printf "Illegal move! No word begins with '%s'!\n" curr_string;
+      declare_win game_state
+  | Word | ValidPrefix ->
+      Printf.printf
+        "Invalid challenge! An example word beginning with '%s' is '%s'.\n"
+        curr_string "EXAMPLE WORD";
+      declare_loss game_state
 
 and evaluate_move game_state c =
   let new_state = GameState.advance game_state c in
@@ -128,19 +138,24 @@ and evaluate_move game_state c =
   match GameState.status new_state with
   | InvalidPrefix ->
       Printf.printf "Illegal move! No word begins with '%s'!\n" next_string;
-      end_game new_state
+      declare_win new_state
   | Word ->
       Printf.printf "Spelled a word! '%s' is a word!\n" next_string;
-      end_game new_state
+      declare_win new_state
   | ValidPrefix -> turn new_state
 
-and end_game game_state =
-  let () =
-    match GameState.is_players_turn game_state with
-    | true -> Printf.printf "You win!\n"
-    | false -> Printf.printf "Computer wins!\n"
-  in
-  ()
+(** Declare the player to move as the winner. *)
+and declare_win game_state =
+  end_game ~winner:(game_state |> GameState.current_turn)
+
+(** Declare the player to move as the loser. *)
+and declare_loss game_state =
+  end_game ~winner:(game_state |> GameState.current_turn |> other_player)
+
+and end_game ~winner =
+  match winner with
+  | Human -> Printf.printf "You win!\n"
+  | Computer -> Printf.printf "Computer wins!\n"
 
 let ask_play_again () =
   Printf.printf "Play again? (Y for yes / any other input to quit)\n";
